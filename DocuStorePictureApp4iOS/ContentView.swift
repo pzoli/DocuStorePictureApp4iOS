@@ -16,6 +16,7 @@ struct DocumentListView: View {
     @Bindable var model: AppModel
     @State private var isShowingSettings = false
     @State private var isShowingLocations = false
+    @State private var isShowingSubjects = false
     @State private var isShowingEditor = false
     @State private var editingDocument: DocInfo?
     @State private var documentPendingDeletion: DocInfo?
@@ -92,6 +93,12 @@ struct DocumentListView: View {
                     } label: {
                         Label("Locations", systemImage: "archivebox")
                     }
+
+                    Button {
+                        isShowingSubjects = true
+                    } label: {
+                        Label("Subjects", systemImage: "tag")
+                    }
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -125,6 +132,9 @@ struct DocumentListView: View {
         }
         .sheet(isPresented: $isShowingLocations) {
             LocationSelectionView(model: model)
+        }
+        .sheet(isPresented: $isShowingSubjects) {
+            SubjectSelectionView(model: model)
         }
         .sheet(isPresented: $isShowingEditor) {
             DocumentEditorView(model: model, document: editingDocument)
@@ -480,17 +490,24 @@ struct DocumentEditorView: View {
     @State private var createdAt = Date()
     @State private var comment = ""
     @State private var isShowingLocationPicker = false
+    @State private var isShowingSubjectPicker = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Document") {
-                    Picker("Subject", selection: $subject) {
-                        Text("Select subject").tag(nil as DocumentSubject?)
-                        ForEach(model.subjects) { item in
-                            Text(item.value).tag(item as DocumentSubject?)
+                    Button {
+                        isShowingSubjectPicker = true
+                    } label: {
+                        HStack {
+                            Text("Subject")
+                            Spacer()
+                            Text(subject?.value ?? "Select subject")
+                                .foregroundStyle(subject == nil ? .secondary : .primary)
+                                .multilineTextAlignment(.trailing)
                         }
                     }
+                    .buttonStyle(.plain)
 
                     Picker("Organization", selection: $organization) {
                         Text("Select organization").tag(nil as Organization?)
@@ -571,6 +588,20 @@ struct DocumentEditorView: View {
                     }
                 )
             }
+            .sheet(isPresented: $isShowingSubjectPicker) {
+                SubjectSelectionView(
+                    model: model,
+                    selectedSubject: subject,
+                    onSelect: { selected in
+                        subject = selected
+                        isShowingSubjectPicker = false
+                    },
+                    onClear: {
+                        subject = nil
+                        isShowingSubjectPicker = false
+                    }
+                )
+            }
             .onAppear {
                 subject = document?.subject
                 organization = document?.organization
@@ -595,6 +626,12 @@ struct SettingsView: View {
                         LocationSelectionView(model: model, isEmbeddedInNavigation: true)
                     } label: {
                         Label("Locations", systemImage: "archivebox")
+                    }
+
+                    NavigationLink {
+                        SubjectSelectionView(model: model, isEmbeddedInNavigation: true)
+                    } label: {
+                        Label("Subjects", systemImage: "tag")
                     }
                 }
 

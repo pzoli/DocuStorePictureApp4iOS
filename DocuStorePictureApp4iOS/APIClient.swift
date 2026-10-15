@@ -28,6 +28,23 @@ final class DocuStoreAPIClient {
         try await request(path: "/api/subject", method: "GET")
     }
 
+    func saveSubject(_ subject: DocumentSubject) async throws -> DocumentSubject {
+        let path = if let id = subject.id { "/api/subject/\(id)" } else { "/api/subject" }
+        let method = subject.id != nil ? "PUT" : "POST"
+        var request = try makeURLRequest(path: path, method: method, accept: "application/json")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder.docuStore.encode(subject)
+        let data = try await perform(request)
+        if data.isEmpty {
+            return subject
+        }
+        return (try? JSONDecoder.docuStore.decode(DocumentSubject.self, from: data)) ?? subject
+    }
+
+    func deleteSubject(id: Int64) async throws {
+        let _: EmptyResponse = try await request(path: "/api/subject/\(id)", method: "DELETE")
+    }
+
     func getOrganizations() async throws -> [Organization] {
         try await request(path: "/api/organization", method: "GET")
     }

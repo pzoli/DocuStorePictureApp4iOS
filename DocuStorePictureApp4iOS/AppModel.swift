@@ -98,6 +98,51 @@ final class AppModel {
         locations = locationTree.flatMap(\.flattenedLocations)
     }
 
+    func reloadSubjects() async throws {
+        let client = try makeClient()
+        subjects = try await client.getSubjects()
+    }
+
+    @discardableResult
+    func saveSubject(_ subject: DocumentSubject) async -> DocumentSubject? {
+        do {
+            let saved = try await makeClient().saveSubject(subject)
+            try await reloadSubjects()
+            if selectedDocument?.subject?.id == saved.id {
+                selectedDocument?.subject = saved
+            }
+            for index in documents.indices {
+                if documents[index].subject?.id == saved.id {
+                    documents[index].subject = saved
+                }
+            }
+            message = "Subject saved."
+            return saved
+        } catch {
+            show(error)
+            return nil
+        }
+    }
+
+    func deleteSubject(_ subject: DocumentSubject) async {
+        guard let id = subject.id else { return }
+        do {
+            try await makeClient().deleteSubject(id: id)
+            try await reloadSubjects()
+            if selectedDocument?.subject?.id == id {
+                selectedDocument?.subject = nil
+            }
+            for index in documents.indices {
+                if documents[index].subject?.id == id {
+                    documents[index].subject = nil
+                }
+            }
+            message = "Subject deleted."
+        } catch {
+            show(error)
+        }
+    }
+
     @discardableResult
     func saveLocation(_ location: DocLocation) async -> DocLocation? {
         do {

@@ -35,6 +35,11 @@ struct Clerk: Codable, Equatable, Identifiable, Hashable {
 struct DocumentSubject: Codable, Equatable, Identifiable, Hashable {
     var id: Int64?
     var value: String
+
+    init(id: Int64? = nil, value: String) {
+        self.id = id
+        self.value = value
+    }
 }
 
 struct Organization: Codable, Equatable, Identifiable, Hashable {
