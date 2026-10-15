@@ -36,14 +36,18 @@ final class DocuStoreAPIClient {
         try await request(path: "/api/doclocation/parent/\(parentId)", method: "GET")
     }
 
-    func getLocationTree(parentId: Int64 = -1) async throws -> [LocationNode] {
+    func getLocationTree(parent: DocLocation? = nil) async throws -> [LocationNode] {
+        let parentId = parent?.id ?? -1
         let locations = try await getLocations(parentId: parentId)
         var nodes: [LocationNode] = []
 
         for location in locations {
+            if location.parent == nil {
+                location.parent = parent
+            }
             let children: [LocationNode]
-            if let id = location.id {
-                children = try await getLocationTree(parentId: id)
+            if location.id != nil {
+                children = try await getLocationTree(parent: location)
             } else {
                 children = []
             }
@@ -51,6 +55,23 @@ final class DocuStoreAPIClient {
         }
 
         return nodes
+    }
+
+    func saveLocation(_ location: DocLocation) async throws -> DocLocation {
+        let path = if let id = location.id { "/api/doclocation/\(id)" } else { "/api/doclocation" }
+        let method = location.id != nil ? "PUT" : "POST"
+        var request = try makeURLRequest(path: path, method: method, accept: "application/json")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder.docuStore.encode(location)
+        let data = try await perform(request)
+        if data.isEmpty {
+            return location
+        }
+        return (try? JSONDecoder.docuStore.decode(DocLocation.self, from: data)) ?? location
+    }
+
+    func deleteLocation(id: Int64) async throws {
+        let _: EmptyResponse = try await request(path: "/api/doclocation/\(id)", method: "DELETE")
     }
 
     func saveDocInfo(_ docInfo: DocInfo) async throws -> DocInfo {

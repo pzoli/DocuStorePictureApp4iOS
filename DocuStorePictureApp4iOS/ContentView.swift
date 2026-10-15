@@ -15,6 +15,7 @@ struct ContentView: View {
 struct DocumentListView: View {
     @Bindable var model: AppModel
     @State private var isShowingSettings = false
+    @State private var isShowingLocations = false
     @State private var isShowingEditor = false
     @State private var editingDocument: DocInfo?
     @State private var documentPendingDeletion: DocInfo?
@@ -79,11 +80,17 @@ struct DocumentListView: View {
                 try? await model.reloadDocuments()
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
                     Button {
                         isShowingSettings = true
                     } label: {
                         Label("Settings", systemImage: "gearshape")
+                    }
+
+                    Button {
+                        isShowingLocations = true
+                    } label: {
+                        Label("Locations", systemImage: "archivebox")
                     }
                 }
 
@@ -115,6 +122,9 @@ struct DocumentListView: View {
         }
         .sheet(isPresented: $isShowingSettings) {
             SettingsView(model: model)
+        }
+        .sheet(isPresented: $isShowingLocations) {
+            LocationSelectionView(model: model)
         }
         .sheet(isPresented: $isShowingEditor) {
             DocumentEditorView(model: model, document: editingDocument)
@@ -549,7 +559,7 @@ struct DocumentEditorView: View {
             }
             .sheet(isPresented: $isShowingLocationPicker) {
                 LocationSelectionView(
-                    nodes: model.locationTree,
+                    model: model,
                     selectedLocation: location,
                     onSelect: { selected in
                         location = selected
@@ -580,6 +590,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Manage") {
+                    NavigationLink {
+                        LocationSelectionView(model: model, isEmbeddedInNavigation: true)
+                    } label: {
+                        Label("Locations", systemImage: "archivebox")
+                    }
+                }
+
                 Section("Server") {
                     TextField("192.168.1.130:8088", text: $model.settings.serverAddress)
                         .textInputAutocapitalization(.never)

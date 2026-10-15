@@ -63,7 +63,7 @@ final class DocLocation: Codable, Identifiable, Hashable {
     var name: String?
     var parent: DocLocation?
 
-    init(id: Int64?, name: String?, parent: DocLocation?) {
+    init(id: Int64? = nil, name: String? = nil, parent: DocLocation? = nil) {
         self.id = id
         self.name = name
         self.parent = parent
