@@ -491,6 +491,8 @@ struct DocumentEditorView: View {
     @State private var comment = ""
     @State private var isShowingLocationPicker = false
     @State private var isShowingSubjectPicker = false
+    @State private var isSaving = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -553,6 +555,9 @@ struct DocumentEditorView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         Task {
+                            isSaving = true
+                            defer { isSaving = false }
+
                             let saved = DocInfo(
                                 id: document?.id,
                                 subject: subject,
@@ -563,13 +568,31 @@ struct DocumentEditorView: View {
                                 comment: comment,
                                 docLocation: location
                             )
-                            if await model.saveDocument(saved) != nil {
+                            do {
+                                _ = try await model.saveDocument(saved)
                                 dismiss()
+                            } catch {
+                                errorMessage = error.localizedDescription
                             }
                         }
                     }
-                    .disabled(subject == nil || organization == nil)
+                    .disabled(subject == nil || organization == nil || isSaving)
                 }
+            }
+            .overlay {
+                if isSaving {
+                    ProgressView("Saving…")
+                        .padding()
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .alert("Error", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
             }
             .task {
                 try? await model.loadReferences()
@@ -580,11 +603,9 @@ struct DocumentEditorView: View {
                     selectedLocation: location,
                     onSelect: { selected in
                         location = selected
-                        isShowingLocationPicker = false
                     },
                     onClear: {
                         location = nil
-                        isShowingLocationPicker = false
                     }
                 )
             }
@@ -594,11 +615,9 @@ struct DocumentEditorView: View {
                     selectedSubject: subject,
                     onSelect: { selected in
                         subject = selected
-                        isShowingSubjectPicker = false
                     },
                     onClear: {
                         subject = nil
-                        isShowingSubjectPicker = false
                     }
                 )
             }
@@ -621,20 +640,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Manage") {
-                    NavigationLink {
-                        LocationSelectionView(model: model, isEmbeddedInNavigation: true)
-                    } label: {
-                        Label("Locations", systemImage: "archivebox")
-                    }
-
-                    NavigationLink {
-                        SubjectSelectionView(model: model, isEmbeddedInNavigation: true)
-                    } label: {
-                        Label("Subjects", systemImage: "tag")
-                    }
-                }
-
                 Section("Server") {
                     TextField("192.168.1.130:8088", text: $model.settings.serverAddress)
                         .textInputAutocapitalization(.never)

@@ -11,7 +11,7 @@ struct LocationSelectionView: View {
         if isEmbeddedInNavigation {
             LocationListContent(
                 model: model,
-                selectedLocation: selectedLocation,
+                initialSelectedLocation: selectedLocation,
                 onSelect: onSelect,
                 onClear: onClear,
                 isSheet: false
@@ -20,7 +20,7 @@ struct LocationSelectionView: View {
             NavigationStack {
                 LocationListContent(
                     model: model,
-                    selectedLocation: selectedLocation,
+                    initialSelectedLocation: selectedLocation,
                     onSelect: onSelect,
                     onClear: onClear,
                     isSheet: true
@@ -32,15 +32,17 @@ struct LocationSelectionView: View {
 
 private struct LocationListContent: View {
     @Bindable var model: AppModel
-    let selectedLocation: DocLocation?
+    let initialSelectedLocation: DocLocation?
     let onSelect: ((DocLocation) -> Void)?
     let onClear: (() -> Void)?
     let isSheet: Bool
 
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedLocation: DocLocation?
     @State private var searchQuery = ""
     @State private var editingContext: LocationEditingContext?
     @State private var locationPendingDeletion: DocLocation?
+    @State private var errorMessage: String?
 
     private var isManageMode: Bool {
         onSelect == nil
@@ -61,6 +63,7 @@ private struct LocationListContent: View {
             if !isManageMode, searchQuery.isEmpty, onClear != nil {
                 Section {
                     Button {
+                        selectedLocation = nil
                         onClear?()
                     } label: {
                         Label("No location", systemImage: selectedLocation == nil ? "checkmark.circle.fill" : "circle")
@@ -78,7 +81,10 @@ private struct LocationListContent: View {
                                 location: location,
                                 selectedLocationID: selectedLocation?.id,
                                 isManageMode: isManageMode,
-                                onSelect: onSelect,
+                                onSelect: { loc in
+                                    selectedLocation = loc
+                                    onSelect?(loc)
+                                },
                                 onEdit: { loc in
                                     editingContext = LocationEditingContext(locationToEdit: loc, defaultParent: nil)
                                 },
@@ -103,7 +109,10 @@ private struct LocationListContent: View {
                             node: node,
                             selectedLocationID: selectedLocation?.id,
                             isManageMode: isManageMode,
-                            onSelect: onSelect,
+                            onSelect: { loc in
+                                selectedLocation = loc
+                                onSelect?(loc)
+                            },
                             onEdit: { loc in
                                 editingContext = LocationEditingContext(locationToEdit: loc, defaultParent: nil)
                             },
@@ -122,6 +131,14 @@ private struct LocationListContent: View {
         .searchable(text: $searchQuery, prompt: "Search locations")
         .refreshable {
             try? await model.reloadLocations()
+        }
+        .onAppear {
+            if selectedLocation == nil {
+                selectedLocation = initialSelectedLocation
+            }
+        }
+        .onChange(of: initialSelectedLocation) { _, newValue in
+            selectedLocation = newValue
         }
         .toolbar {
             if isSheet {
@@ -144,10 +161,8 @@ private struct LocationListContent: View {
                 locationToEdit: context.locationToEdit,
                 defaultParent: context.defaultParent,
                 onSaved: { saved in
-                    if !isManageMode && context.locationToEdit == nil {
-                        onSelect?(saved)
-                        dismiss()
-                    } else if !isManageMode && context.locationToEdit != nil && selectedLocation?.id == saved.id {
+                    if !isManageMode {
+                        selectedLocation = saved
                         onSelect?(saved)
                     }
                 }
@@ -167,9 +182,14 @@ private struct LocationListContent: View {
                 if let location = locationPendingDeletion {
                     let deletedID = location.id
                     Task {
-                        await model.deleteLocation(location)
-                        if selectedLocation?.id == deletedID {
-                            onClear?()
+                        do {
+                            try await model.deleteLocation(location)
+                            if selectedLocation?.id == deletedID {
+                                selectedLocation = nil
+                                onClear?()
+                            }
+                        } catch {
+                            errorMessage = error.localizedDescription
                         }
                     }
                 }
@@ -180,15 +200,15 @@ private struct LocationListContent: View {
             }
         }
         .alert(
-            "DocuStore",
+            "Error",
             isPresented: Binding(
-                get: { model.message != nil },
-                set: { if !$0 { model.message = nil } }
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
             )
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(model.message ?? "")
+            Text(errorMessage ?? "")
         }
     }
 }
@@ -442,6 +462,7 @@ struct LocationEditorView: View {
     @State private var name: String = ""
     @State private var selectedParentID: Int64?
     @State private var isSaving: Bool = false
+    @State private var errorMessage: String?
 
     private var isEditing: Bool {
         locationToEdit != nil
@@ -511,6 +532,14 @@ struct LocationEditorView: View {
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
             }
+            .alert("Error", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
             .onAppear {
                 if let locationToEdit {
                     name = locationToEdit.name ?? ""
@@ -538,9 +567,12 @@ struct LocationEditorView: View {
                 parent: parentLocation
             )
 
-            if let saved = await model.saveLocation(location) {
+            do {
+                let saved = try await model.saveLocation(location)
                 onSaved?(saved)
                 dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
             }
         }
     }

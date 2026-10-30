@@ -104,100 +104,87 @@ final class AppModel {
     }
 
     @discardableResult
-    func saveSubject(_ subject: DocumentSubject) async -> DocumentSubject? {
-        do {
-            let saved = try await makeClient().saveSubject(subject)
-            try await reloadSubjects()
-            if selectedDocument?.subject?.id == saved.id {
-                selectedDocument?.subject = saved
-            }
-            for index in documents.indices {
-                if documents[index].subject?.id == saved.id {
-                    documents[index].subject = saved
-                }
-            }
-            message = "Subject saved."
-            return saved
-        } catch {
-            show(error)
-            return nil
+    func saveSubject(_ subject: DocumentSubject) async throws -> DocumentSubject {
+        let saved = try await makeClient().saveSubject(subject)
+        try await reloadSubjects()
+        let resolved = if saved.id != nil {
+            saved
+        } else if let found = subjects.first(where: { $0.value == subject.value }) {
+            found
+        } else {
+            saved
         }
+        if selectedDocument?.subject?.id == resolved.id {
+            selectedDocument?.subject = resolved
+        }
+        for index in documents.indices {
+            if documents[index].subject?.id == resolved.id {
+                documents[index].subject = resolved
+            }
+        }
+        return resolved
     }
 
-    func deleteSubject(_ subject: DocumentSubject) async {
+    func deleteSubject(_ subject: DocumentSubject) async throws {
         guard let id = subject.id else { return }
-        do {
-            try await makeClient().deleteSubject(id: id)
-            try await reloadSubjects()
-            if selectedDocument?.subject?.id == id {
-                selectedDocument?.subject = nil
+        try await makeClient().deleteSubject(id: id)
+        try await reloadSubjects()
+        if selectedDocument?.subject?.id == id {
+            selectedDocument?.subject = nil
+        }
+        for index in documents.indices {
+            if documents[index].subject?.id == id {
+                documents[index].subject = nil
             }
-            for index in documents.indices {
-                if documents[index].subject?.id == id {
-                    documents[index].subject = nil
-                }
-            }
-            message = "Subject deleted."
-        } catch {
-            show(error)
         }
     }
 
     @discardableResult
-    func saveLocation(_ location: DocLocation) async -> DocLocation? {
-        do {
-            let saved = try await makeClient().saveLocation(location)
-            try await reloadLocations()
-            if selectedDocument?.docLocation?.id == saved.id {
-                selectedDocument?.docLocation = saved
-            }
-            for index in documents.indices {
-                if documents[index].docLocation?.id == saved.id {
-                    documents[index].docLocation = saved
-                }
-            }
-            message = "Location saved."
-            return saved
-        } catch {
-            show(error)
-            return nil
+    func saveLocation(_ location: DocLocation) async throws -> DocLocation {
+        let saved = try await makeClient().saveLocation(location)
+        try await reloadLocations()
+        let resolved = if saved.id != nil {
+            saved
+        } else if let found = locations.first(where: { $0.name == location.name }) {
+            found
+        } else {
+            saved
         }
+        if selectedDocument?.docLocation?.id == resolved.id {
+            selectedDocument?.docLocation = resolved
+        }
+        for index in documents.indices {
+            if documents[index].docLocation?.id == resolved.id {
+                documents[index].docLocation = resolved
+            }
+        }
+        return resolved
     }
 
-    func deleteLocation(_ location: DocLocation) async {
+    func deleteLocation(_ location: DocLocation) async throws {
         guard let id = location.id else { return }
-        do {
-            try await makeClient().deleteLocation(id: id)
-            try await reloadLocations()
-            if selectedDocument?.docLocation?.id == id {
-                selectedDocument?.docLocation = nil
+        try await makeClient().deleteLocation(id: id)
+        try await reloadLocations()
+        if selectedDocument?.docLocation?.id == id {
+            selectedDocument?.docLocation = nil
+        }
+        for index in documents.indices {
+            if documents[index].docLocation?.id == id {
+                documents[index].docLocation = nil
             }
-            for index in documents.indices {
-                if documents[index].docLocation?.id == id {
-                    documents[index].docLocation = nil
-                }
-            }
-            message = "Location deleted."
-        } catch {
-            show(error)
         }
     }
 
-    func saveDocument(_ document: DocInfo) async -> DocInfo? {
-        do {
-            let saved = try await makeClient().saveDocInfo(document)
-            if let index = documents.firstIndex(where: { $0.id == saved.id }) {
-                documents[index] = saved
-            } else {
-                documents.insert(saved, at: 0)
-            }
-            selectedDocument = saved
-            message = "Document saved."
-            return saved
-        } catch {
-            show(error)
-            return nil
+    @discardableResult
+    func saveDocument(_ document: DocInfo) async throws -> DocInfo {
+        let saved = try await makeClient().saveDocInfo(document)
+        if let index = documents.firstIndex(where: { $0.id == saved.id }) {
+            documents[index] = saved
+        } else {
+            documents.insert(saved, at: 0)
         }
+        selectedDocument = saved
+        return saved
     }
 
     func delete(_ document: DocInfo) async {
@@ -210,7 +197,6 @@ final class AppModel {
                 files = []
                 selectedImage = nil
             }
-            message = "Document deleted."
         } catch {
             show(error)
         }

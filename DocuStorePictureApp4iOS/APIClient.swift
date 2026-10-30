@@ -38,7 +38,16 @@ final class DocuStoreAPIClient {
         if data.isEmpty {
             return subject
         }
-        return (try? JSONDecoder.docuStore.decode(DocumentSubject.self, from: data)) ?? subject
+        if let decoded = try? JSONDecoder.docuStore.decode(DocumentSubject.self, from: data) {
+            return decoded
+        }
+        if let id = try? JSONDecoder.docuStore.decode(Int64.self, from: data) {
+            return DocumentSubject(id: id, value: subject.value)
+        }
+        if let string = String(data: data, encoding: .utf8), let id = Int64(string.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return DocumentSubject(id: id, value: subject.value)
+        }
+        return subject
     }
 
     func deleteSubject(id: Int64) async throws {
@@ -84,7 +93,16 @@ final class DocuStoreAPIClient {
         if data.isEmpty {
             return location
         }
-        return (try? JSONDecoder.docuStore.decode(DocLocation.self, from: data)) ?? location
+        if let decoded = try? JSONDecoder.docuStore.decode(DocLocation.self, from: data) {
+            return decoded
+        }
+        if let id = try? JSONDecoder.docuStore.decode(Int64.self, from: data) {
+            return DocLocation(id: id, name: location.name, parent: location.parent)
+        }
+        if let string = String(data: data, encoding: .utf8), let id = Int64(string.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return DocLocation(id: id, name: location.name, parent: location.parent)
+        }
+        return location
     }
 
     func deleteLocation(id: Int64) async throws {

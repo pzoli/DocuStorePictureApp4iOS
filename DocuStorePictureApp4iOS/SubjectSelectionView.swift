@@ -11,7 +11,7 @@ struct SubjectSelectionView: View {
         if isEmbeddedInNavigation {
             SubjectListContent(
                 model: model,
-                selectedSubject: selectedSubject,
+                initialSelectedSubject: selectedSubject,
                 onSelect: onSelect,
                 onClear: onClear,
                 isSheet: false
@@ -20,7 +20,7 @@ struct SubjectSelectionView: View {
             NavigationStack {
                 SubjectListContent(
                     model: model,
-                    selectedSubject: selectedSubject,
+                    initialSelectedSubject: selectedSubject,
                     onSelect: onSelect,
                     onClear: onClear,
                     isSheet: true
@@ -32,15 +32,17 @@ struct SubjectSelectionView: View {
 
 private struct SubjectListContent: View {
     @Bindable var model: AppModel
-    let selectedSubject: DocumentSubject?
+    let initialSelectedSubject: DocumentSubject?
     let onSelect: ((DocumentSubject) -> Void)?
     let onClear: (() -> Void)?
     let isSheet: Bool
 
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedSubject: DocumentSubject?
     @State private var searchQuery = ""
     @State private var editingContext: SubjectEditingContext?
     @State private var subjectPendingDeletion: DocumentSubject?
+    @State private var errorMessage: String?
 
     private var isManageMode: Bool {
         onSelect == nil
@@ -59,6 +61,7 @@ private struct SubjectListContent: View {
             if !isManageMode, searchQuery.isEmpty, onClear != nil {
                 Section {
                     Button {
+                        selectedSubject = nil
                         onClear?()
                     } label: {
                         Label("No subject", systemImage: selectedSubject == nil ? "checkmark.circle.fill" : "circle")
@@ -76,7 +79,10 @@ private struct SubjectListContent: View {
                                 subject: subject,
                                 isSelected: selectedSubject?.id == subject.id,
                                 isManageMode: isManageMode,
-                                onSelect: onSelect,
+                                onSelect: { subj in
+                                    selectedSubject = subj
+                                    onSelect?(subj)
+                                },
                                 onEdit: { subj in
                                     editingContext = SubjectEditingContext(subjectToEdit: subj)
                                 },
@@ -98,7 +104,10 @@ private struct SubjectListContent: View {
                             subject: subject,
                             isSelected: selectedSubject?.id == subject.id,
                             isManageMode: isManageMode,
-                            onSelect: onSelect,
+                            onSelect: { subj in
+                                selectedSubject = subj
+                                onSelect?(subj)
+                            },
                             onEdit: { subj in
                                 editingContext = SubjectEditingContext(subjectToEdit: subj)
                             },
@@ -114,6 +123,14 @@ private struct SubjectListContent: View {
         .searchable(text: $searchQuery, prompt: "Search subjects")
         .refreshable {
             try? await model.reloadSubjects()
+        }
+        .onAppear {
+            if selectedSubject == nil {
+                selectedSubject = initialSelectedSubject
+            }
+        }
+        .onChange(of: initialSelectedSubject) { _, newValue in
+            selectedSubject = newValue
         }
         .toolbar {
             if isSheet {
@@ -135,10 +152,8 @@ private struct SubjectListContent: View {
                 model: model,
                 subjectToEdit: context.subjectToEdit,
                 onSaved: { saved in
-                    if !isManageMode && context.subjectToEdit == nil {
-                        onSelect?(saved)
-                        dismiss()
-                    } else if !isManageMode && context.subjectToEdit != nil && selectedSubject?.id == saved.id {
+                    if !isManageMode {
+                        selectedSubject = saved
                         onSelect?(saved)
                     }
                 }
@@ -158,9 +173,14 @@ private struct SubjectListContent: View {
                 if let subject = subjectPendingDeletion {
                     let deletedID = subject.id
                     Task {
-                        await model.deleteSubject(subject)
-                        if selectedSubject?.id == deletedID {
-                            onClear?()
+                        do {
+                            try await model.deleteSubject(subject)
+                            if selectedSubject?.id == deletedID {
+                                selectedSubject = nil
+                                onClear?()
+                            }
+                        } catch {
+                            errorMessage = error.localizedDescription
                         }
                     }
                 }
@@ -171,15 +191,15 @@ private struct SubjectListContent: View {
             }
         }
         .alert(
-            "DocuStore",
+            "Error",
             isPresented: Binding(
-                get: { model.message != nil },
-                set: { if !$0 { model.message = nil } }
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
             )
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(model.message ?? "")
+            Text(errorMessage ?? "")
         }
     }
 }
@@ -278,6 +298,7 @@ struct SubjectEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var value: String = ""
     @State private var isSaving: Bool = false
+    @State private var errorMessage: String?
 
     private var isEditing: Bool {
         subjectToEdit != nil
@@ -314,6 +335,14 @@ struct SubjectEditorView: View {
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
             }
+            .alert("Error", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
             .onAppear {
                 if let subjectToEdit {
                     value = subjectToEdit.value
@@ -334,9 +363,12 @@ struct SubjectEditorView: View {
                 value: value.trimmingCharacters(in: .whitespacesAndNewlines)
             )
 
-            if let saved = await model.saveSubject(subject) {
+            do {
+                let saved = try await model.saveSubject(subject)
                 onSaved?(saved)
                 dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
             }
         }
     }
